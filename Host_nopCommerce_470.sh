@@ -4,7 +4,7 @@ if ! command -v unzip &> /dev/null; then
     
     # Check if apt package manager is available
     if command -v apt &> /dev/null; then
-        sudo apt update
+        sudo apt update -y
         sudo apt install unzip -y
     # Check if yum package manager is available
     elif command -v yum &> /dev/null; then
