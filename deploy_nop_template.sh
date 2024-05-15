@@ -43,8 +43,8 @@ check_and_create_directory_and_change_owner() {
 
 
 #nop hosting dir
-nopHostingDir="/var/www/eCom/nuPodTest"
-webRootPath="/var/www/eCom/nuPodTest"
+webRootPath="/var/www"
+nopHostingDir="$webRootPath/eCom/nuPodTest"
 
 check_and_create_directory "/var/www"
 check_and_create_directory "/var/www/eCom"
@@ -84,7 +84,7 @@ sudo -S chown www-data:www-data $nopHostingDir/*
 sudo -S chown www-data:www-data "$nopHostingDir"
 sudo -S chown www-data:www-data "$nopHostingDir/"
 
-directories=("/var/www" "/var/www/eCom" "$webRootPath" "$webRootPath/App_Data" "$webRootPath/wwwroot" "$webRootPath/wwwroot/images" "$webRootPath/wwwroot/images/thumbs" "$webRootPath/wwwroot/js" "$webRootPath/wwwroot/uploads")
+directories=("$nopHostingDir" "$nopHostingDir/App_Data" "$nopHostingDir/wwwroot" "$nopHostingDir/wwwroot/images" "$nopHostingDir/wwwroot/images/thumbs" "$nopHostingDir/wwwroot/js" "$nopHostingDir/wwwroot/uploads")
 
 for dir in "${directories[@]}"; do
     check_and_create_directory_and_change_owner "$dir"
@@ -92,10 +92,10 @@ done
 
 wwwRootPath="$nopHostingDir/wwwroot"
 
-permission_paths=("$nopHostingDir" "$wwwRootPath" "$wwwRootPath/css"  "$wwwRootPath/images" "$wwwRootPath/lib" "$wwwRootPath/my-bucket" "$wwwRootPath/images/thumbs" "$wwwRootPath/js" "$wwwRootPath/uploads" "/var/www/eCom/nuPodTest/App_Data/")
+permission_paths=("$nopHostingDir" "$wwwRootPath" "$wwwRootPath/css"  "$wwwRootPath/images" "$wwwRootPath/lib" "$wwwRootPath/my-bucket" "$wwwRootPath/images/thumbs" "$wwwRootPath/js" "$wwwRootPath/uploads" "$nopHostingDir/App_Data/")
 change_permission_and_owner "${permission_paths[@]}" 
 
-rm -rf /var/www/eCom/nuPodTest/App_Data/appsettings.json
+rm -rf "$nopHostingDir/App_Data/appsettings.json"
 
 sudo chmod -R 755 "$nopHostingDir" && sudo chown -R www-data:www-data "$nopHostingDir"
 
