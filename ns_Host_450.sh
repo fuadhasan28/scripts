@@ -28,8 +28,10 @@ fi
 
 # region initial
 
-webRootPath="/var/www"
+wwwRootPath="/var/www"
+webRootPath="$wwwRootPath/NopSites"
 etcPath="/etc/systemd/system"
+baseNopVersion="460"
 
 # utilite functions
 
@@ -72,20 +74,78 @@ check_and_create_directory() {
 	#sudo -S chown www-data:www-data "$dir"
 }
 
+check_and_create_directory "$wwwRootPath"
 check_and_create_directory "$webRootPath"
 
+# ************************************************************ site types ************************************************************
+# Define site types array
+siteTypeOptions=(
+    "Demo"
+    "Test"
+    "AppSite"
+    "Theme"
+    "Client"
+)
 
+# Initialize selectedSiteType with default value "Test"
+selectedSiteType="Test"
+
+# Function to print available site types
+print_site_types() {
+    echo -e "Available site types:\e[33m"
+    for i in "${!siteTypeOptions[@]}"; do
+        echo "$((i+1)) : ${siteTypeOptions[i]}"
+    done
+    echo -e "\e[0mPlease enter a number between 1 and ${#siteTypeOptions[@]}, or press Enter to use the default [Test]."
+}
+
+# Function to validate site type index
+validate_site_type_index() {
+    local index="$1"
+    if [[ "$index" =~ ^[0-9]+$ && "$index" -ge 1 && "$index" -le ${#siteTypeOptions[@]} ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Display site types and get user input
+print_site_types
+
+while true; do
+    read -p "Enter an index for site type (default is Test): " siteTypeIndex
+    if [[ -z "$siteTypeIndex" ]]; then
+        echo "No input provided. Using default site type: $selectedSiteType"
+        break
+    elif validate_site_type_index "$siteTypeIndex"; then
+        valid_siteType_index=$((siteTypeIndex-1))
+        selectedSiteType="${siteTypeOptions[valid_siteType_index]}"
+        echo "Selected site type: ${selectedSiteType}"
+        break
+    else
+        echo "Invalid value. Please enter a valid number between 1 and ${#siteTypeOptions[@]}, or press Enter to use the default."
+    fi
+done
+
+echo "Proceeding with site type: $selectedSiteType"
+
+
+check_and_create_directory "$webRootPath/$selectedSiteType"
+check_and_create_directory "$webRootPath/$selectedSiteType/470"
+hostingPath="$webRootPath/$selectedSiteType/${baseNopVersion}"
+
+check_and_create_directory "$hostingPath"
 
 # ************************************************************ nopCommerce versions ************************************************************
 # nopCommerce versions
 dirNServiceName=""
-nopVersion="4.70.0"
+nopVersion="4.60.0"
 nopCommerce_versions=(
-    "4.70.4"
-    "4.70.3"
-    "4.70.2"
-    "4.70.1"
-    "4.70.0"
+    "4.50.4"
+    "4.50.3"
+    "4.50.2"
+    "4.50.1"
+    "4.50.0"
 )
 
 print_array() {
@@ -138,19 +198,19 @@ validate_input() {
 
 # Function to check if a directory exists
 check_directory() {
-	checkDirName="nop_${nopVersion}_${1}"
-    if [ -d "$webRootPath/$checkDirName" ]; then
-        echo "Directory '$webRootPath/$checkDirName' already exists."
+	checkDirName="${1}"
+    if [ -d "$hostingPath/${selectedSiteType}_$checkDirName" ]; then
+        echo "Directory '$hostingPath/$checkDirName' already exists."
         return 0
     else
-        echo "Directory '$webRootPath/$checkDirName' does not exist."
+        echo "Directory '$hostingPath/$checkDirName' does not exist."
         return 1
     fi
 }
 
 # Function to check if a service file exists
 check_service() {
-	checkServiceName="nop_${nopVersion}_${1}.service"
+	checkServiceName="nop_${selectedSiteType}_${baseNopVersion}_${1}.service"
     if [ -f "$etcPath/$checkServiceName" ]; then
         echo "Service file '$etcPath/$checkServiceName' already exists."
         return 0
@@ -174,10 +234,10 @@ while true; do
 done
 
 dirNServiceName="$input"
-nopHostingDir="$webRootPath/nop_${nopVersion}_${dirNServiceName}"
+nopHostingDir="$hostingPath/${selectedSiteType}_${dirNServiceName}"
 echo -e "Hosting path: \e[93m'$nopHostingDir'\e[0m"
 
-serviceName="nop_${nopVersion}_${dirNServiceName}.service"
+serviceName="nop_${selectedSiteType}_${dirNServiceName}_${baseNopVersion}.service"
 echo -e "ServiceName: \e[93m$serviceName\e[0m"
 
 
@@ -258,22 +318,23 @@ done
 
 #nop hosting dir
 sudo ufw allow $port
+echo -e "\e[96mcheck_and_create_directory $nopHostingDir"
 check_and_create_directory $nopHostingDir
 
 #install asp.net
 
-# Check if dotnet-runtime-8.0 is installed
-if ! dpkg -s dotnet-runtime-8.0 &>/dev/null; then
-    # If not installed, install dotnet-runtime-8.0
-    echo -e "\e[93mdotnet-runtime-8.0 is not installed. Installing...\e[0m"
-	wget https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
-	sudo dpkg -i packages-microsoft-prod.deb
-	sudo apt update -y
-	sudo apt install apt-transport-https -y
-	sudo apt-get install -y dotnet-runtime-8.0
-	sudo apt install -y aspnetcore-runtime-8.0
+
+#install asp.net
+
+# Install .NET 6 runtime if not already installed
+if ! dpkg -s dotnet-runtime-6.0 &>/dev/null; then
+    echo -e "\e[93mInstalling dotnet-runtime-6.0...\e[0m"
+    wget https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
+    sudo dpkg -i packages-microsoft-prod.deb
+    sudo apt update -y
+    sudo apt install -y dotnet-runtime-6.0
 else
-    echo -e "\e[93mdotnet-runtime-8.0 is already installed.\e[0m"
+    echo -e "\e[92m.NET 6 runtime is already installed.\e[0m"
 fi
 
 dotnet --list-runtimes
@@ -309,6 +370,9 @@ permission_paths=("$nopHostingDir" "$wwwRootPath" "$wwwRootPath/css"  "$wwwRootP
 #change_permission_and_owner "${permission_paths[@]}" 
 
 sudo rm -rf "$nopHostingDir/App_Data/appsettings.json"
+sudo mkdir "$nopHostingDir/bin"
+sudo mkdir "$nopHostingDir/logs"
+sudo mkdir "$nopHostingDir/Logs"
 
 sudo chmod -R 755 "$nopHostingDir" && sudo chown -R www-data:www-data "$nopHostingDir"
 
@@ -323,11 +387,10 @@ ls -l "$wwwRootPath/*"
 
 #!/bin/bash
 cd "$etcPath"
-#serviceName="nop_$nopVersion_$dirNServiceName.service"
 
 sudo cat <<EOF > "$serviceName"
 [Unit]
-Description=NopCommerce eCommerce application
+Description=NopCommerce $nopVersion application type of $selectedSiteType for $dirNServiceName
 
 [Service]
 WorkingDirectory=$nopHostingDir

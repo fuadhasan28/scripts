@@ -4,7 +4,7 @@ if ! command -v unzip &> /dev/null; then
     
     # Check if apt package manager is available
     if command -v apt &> /dev/null; then
-        sudo apt update
+        sudo apt update -y
         sudo apt install unzip -y
     # Check if yum package manager is available
     elif command -v yum &> /dev/null; then
@@ -25,10 +25,13 @@ else
     echo "Unzip is already installed."
 fi
 
+
 # region initial
 
-webRootPath="/var/www"
+wwwRootPath="/var/www"
+webRootPath="$wwwRootPath/NopSites"
 etcPath="/etc/systemd/system"
+baseNopVersion="450"
 
 # utilite functions
 
@@ -71,34 +74,76 @@ check_and_create_directory() {
 	#sudo -S chown www-data:www-data "$dir"
 }
 
+check_and_create_directory "$wwwRootPath"
 check_and_create_directory "$webRootPath"
 
+# ************************************************************ site types ************************************************************
+# Define site types array
+siteTypeOptions=(
+    "Demo"
+    "Test"
+    "AppSite"
+    "Theme"
+    "Client"
+)
 
+# Initialize selectedSiteType with default value "Test"
+selectedSiteType="Test"
+
+# Function to print available site types
+print_site_types() {
+    echo -e "Available site types:\e[33m"
+    for i in "${!siteTypeOptions[@]}"; do
+        echo "$((i+1)) : ${siteTypeOptions[i]}"
+    done
+    echo -e "\e[0mPlease enter a number between 1 and ${#siteTypeOptions[@]}, or press Enter to use the default [Test]."
+}
+
+# Function to validate site type index
+validate_site_type_index() {
+    local index="$1"
+    if [[ "$index" =~ ^[0-9]+$ && "$index" -ge 1 && "$index" -le ${#siteTypeOptions[@]} ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Display site types and get user input
+print_site_types
+
+while true; do
+    read -p "Enter an index for site type (default is Test): " siteTypeIndex
+    if [[ -z "$siteTypeIndex" ]]; then
+        echo "No input provided. Using default site type: $selectedSiteType"
+        break
+    elif validate_site_type_index "$siteTypeIndex"; then
+        valid_siteType_index=$((siteTypeIndex-1))
+        selectedSiteType="${siteTypeOptions[valid_siteType_index]}"
+        echo "Selected site type: ${selectedSiteType}"
+        break
+    else
+        echo "Invalid value. Please enter a valid number between 1 and ${#siteTypeOptions[@]}, or press Enter to use the default."
+    fi
+done
+
+echo "Proceeding with site type: $selectedSiteType"
+
+
+check_and_create_directory "$webRootPath/$selectedSiteType"
+check_and_create_directory "$webRootPath/$selectedSiteType/470"
+hostingPath="$webRootPath/$selectedSiteType/${baseNopVersion}"
 
 # ************************************************************ nopCommerce versions ************************************************************
 # nopCommerce versions
 dirNServiceName=""
-nopVersion="4.60.0"
+nopVersion="4.50.0"
 nopCommerce_versions=(
-    "4.60.6"
-    "4.60.5"
-    "4.60.4"
-    "4.60.3"
-    "4.60.2"
-    "4.60.1"
-    "4.60.0"
-    # "4.50.4"
-    # "4.50.3"
-    # "4.50.2"
-    # "4.50.1"
-    # "4.50.0"
-    # "4.40.4"
-    # "4.40.3"
-    # "4.40.2"
-    # "4.40.1"
-    # "4.40.0"
-    # "4.30"
-    # "4.20"
+    "4.50.4"
+    "4.50.3"
+    "4.50.2"
+    "4.50.1"
+    "4.50.0"
 )
 
 print_array() {
@@ -151,19 +196,19 @@ validate_input() {
 
 # Function to check if a directory exists
 check_directory() {
-	checkDirName="nop_${nopVersion}_${1}"
-    if [ -d "$webRootPath/$checkDirName" ]; then
-        echo "Directory '$webRootPath/$checkDirName' already exists."
+	checkDirName="${1}"
+    if [ -d "$hostingPath/${selectedSiteType}_$checkDirName" ]; then
+        echo "Directory '$hostingPath/$checkDirName' already exists."
         return 0
     else
-        echo "Directory '$webRootPath/$checkDirName' does not exist."
+        echo "Directory '$hostingPath/$checkDirName' does not exist."
         return 1
     fi
 }
 
 # Function to check if a service file exists
 check_service() {
-	checkServiceName="nop_${nopVersion}_${1}.service"
+	checkServiceName="nop_${selectedSiteType}_${baseNopVersion}_${1}.service"
     if [ -f "$etcPath/$checkServiceName" ]; then
         echo "Service file '$etcPath/$checkServiceName' already exists."
         return 0
@@ -187,11 +232,11 @@ while true; do
 done
 
 dirNServiceName="$input"
-nopHostingDir="$webRootPath/nop_${nopVersion}_${dirNServiceName}"
-echo "Hosting path: '$nopHostingDir'"
+nopHostingDir="$hostingPath/${selectedSiteType}_${dirNServiceName}"
+echo -e "Hosting path: \e[93m'$nopHostingDir'\e[0m"
 
-serviceName="nop_${nopVersion}_${dirNServiceName}.service"
-echo "ServiceName: $serviceName"
+serviceName="nop_${selectedSiteType}_${dirNServiceName}_${baseNopVersion}.service"
+echo -e "ServiceName: \e[93m$serviceName\e[0m"
 
 
 # ************************************************************ port for nop ************************************************************
@@ -257,6 +302,7 @@ while true; do
     if prompt_user "$port"; then
         if [[ "$choice" == "c" ]]; then
             echo -e "Chosen port: \e[32m$chosen_port\e[0m"
+			port=$chosen_port
         else
             echo -e "\e[32mAccepted port: $port\e[0m"
         fi
@@ -266,7 +312,6 @@ while true; do
     fi
 done
 
-
 # ************************************************************ start hosting nop ************************************************************
 
 #nop hosting dir
@@ -275,18 +320,15 @@ check_and_create_directory $nopHostingDir
 
 #install asp.net
 
-# Check if dotnet-runtime-7.0 is installed
-if ! dpkg -s dotnet-runtime-7.0 &>/dev/null; then
-    # If not installed, install dotnet-runtime-7.0
-    echo "dotnet-runtime-7.0 is not installed. Installing..."
-	
-	wget https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
-	sudo dpkg -i packages-microsoft-prod.deb
-	sudo apt update -y
-	sudo apt install apt-transport-https -y
-	sudo apt-get install -y dotnet-runtime-7.0
+# Install .NET 6 runtime if not already installed
+if ! dpkg -s dotnet-runtime-6.0 &>/dev/null; then
+    echo -e "\e[93mInstalling dotnet-runtime-6.0...\e[0m"
+    wget https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
+    sudo dpkg -i packages-microsoft-prod.deb
+    sudo apt update -y
+    sudo apt install -y dotnet-runtime-6.0
 else
-    echo "dotnet-runtime-7.0 is already installed."
+    echo -e "\e[93m.NET 6 runtime is already installed.\e[0m"
 fi
 
 dotnet --list-runtimes
@@ -336,11 +378,10 @@ ls -l "$wwwRootPath/*"
 
 #!/bin/bash
 cd "$etcPath"
-#serviceName="nop_$nopVersion_$dirNServiceName.service"
 
 sudo cat <<EOF > "$serviceName"
 [Unit]
-Description=NopCommerce eCommerce application
+Description=NopCommerce $nopVersion application type of $selectedSiteType for $dirNServiceName
 
 [Service]
 WorkingDirectory=$nopHostingDir
@@ -360,11 +401,16 @@ Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
 WantedBy=multi-user.target
 EOF
 
-echo "$serviceName file created successfully."
+echo -e "\e[93m$serviceName\e[0m file created successfully."
+
+sudo cat "$serviceName"
+
 
 sudo systemctl daemon-reload
 sudo systemctl enable $serviceName
 sudo systemctl start $serviceName
-sudo systemctl status $serviceName
 
 echo -e "\e[31mnopCommerce is hosted on the port : \"$port\". If you are using any cloud service with a public IP, please allow the port: \"$port\" from their dashboard if you want to access with the IP\e[0m"
+
+
+ 
