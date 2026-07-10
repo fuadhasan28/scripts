@@ -31,7 +31,7 @@ fi
 wwwRootPath="/var/www"
 webRootPath="$wwwRootPath/NopSites"
 etcPath="/etc/systemd/system"
-baseNopVersion="480"
+baseNopVersion="490"
 dotnetVersion="9.0"
 
 
@@ -151,18 +151,13 @@ hostingPath="$webRootPath/$selectedSiteType/${baseNopVersion}"
 # ************************************************************ nopCommerce versions ************************************************************
 # nopCommerce versions
 dirNServiceName=""
-nopVersion="4.80.0"
+nopVersion="4.90.0"
 nopCommerce_versions=(
-    "4.80.9"
-    "4.80.8"
-    "4.80.7"
-    "4.80.6"
-    "4.80.5"
-    "4.80.4"
-    "4.80.3"
-    "4.80.2"
-    "4.80.1"
-    "4.80.0"
+    "4.90.4"
+    "4.90.3"
+    "4.90.2"
+    "4.90.1"
+    "4.90.0"
 )
 
 print_array() {
@@ -442,6 +437,3 @@ sudo systemctl enable $serviceName
 sudo systemctl start $serviceName
 
 echo -e "\e[31mnopCommerce is hosted on the port : \"$port\". If you are using any cloud service with a public IP, please allow the port: \"$port\" from their dashboard if you want to access with the IP\e[0m"
-
-
- 

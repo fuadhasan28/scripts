@@ -77,7 +77,8 @@ echo "🔐 Generating self-signed certificate..."
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -keyout "${APP_NAME}.key" \
   -out "${APP_NAME}.crt" \
-  -subj "/CN=localhost"
+  -subj "/CN=localhost" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
 
 openssl pkcs12 -export \
   -out "$CERT_PFX" \
@@ -115,4 +116,3 @@ echo ""
 echo "✅ $APP_NAME is now running with HTTPS at https://127.0.0.1:${PORT}"
 echo "🔐 Certificate Path: $CERT_PFX"
 echo "🔑 Certificate Password: $CERT_PASS"
-[[ "$USE_NGINX" =~ ^[Yy]$ ]] && echo "🌐 NGINX config updated to use HTTPS for proxy_pass"

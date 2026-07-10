@@ -1,0 +1,217 @@
+#!/usr/bin/env bash
+# =============================================================================
+# harden_nginx_default.sh
+# =============================================================================
+# Purpose  : Replace /etc/nginx/sites-available/default with a hardened vhost
+#            that blocks ALL HTTP and HTTPS requests coming in via a bare IP
+#            (i.e. any request that doesn't match a real server_name).
+#
+# What it does:
+#   1. Backs up the current default vhost  →  default.bak
+#   2. Creates a self-signed TLS cert (if one doesn't exist yet) so that the
+#      HTTPS catch-all block can terminate SSL without an error.
+#   3. Writes the new hardened default vhost.
+#   4. Tests the Nginx configuration  (nginx -t).
+#   5a. If the test PASSES  → reloads Nginx (systemctl reload nginx).
+#   5b. If the test FAILS   → restores the backup and exits non-zero.
+#
+# Usage    : sudo bash harden_nginx_default.sh
+# =============================================================================
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Configuration – change these if you keep certs somewhere else
+# ---------------------------------------------------------------------------
+NGINX_DEFAULT="/etc/nginx/sites-available/default"
+BACKUP="${NGINX_DEFAULT}.bak"
+SSL_CERT="/etc/ssl/certs/nginx-default.crt"
+SSL_KEY="/etc/ssl/private/nginx-default.key"
+NGINX_CONF_D="/etc/nginx/conf.d"
+RATE_LIMIT_CONF="${NGINX_CONF_D}/rate_limit.conf"
+
+# ---------------------------------------------------------------------------
+# Colour helpers
+# ---------------------------------------------------------------------------
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
+info()    { echo -e "${GREEN}[INFO]${NC}  $*"; }
+warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
+error()   { echo -e "${RED}[ERROR]${NC} $*"; }
+
+# ---------------------------------------------------------------------------
+# Root check
+# ---------------------------------------------------------------------------
+if [[ $EUID -ne 0 ]]; then
+    error "This script must be run as root (use sudo)."
+    exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Step 1 – Backup current default vhost
+# ---------------------------------------------------------------------------
+info "Step 1/5 – Backing up ${NGINX_DEFAULT} → ${BACKUP}"
+if [[ -f "$NGINX_DEFAULT" ]]; then
+    cp -p "$NGINX_DEFAULT" "$BACKUP"
+    info "Backup created at ${BACKUP}"
+else
+    warn "No existing file at ${NGINX_DEFAULT}; skipping backup."
+fi
+
+# ---------------------------------------------------------------------------
+# Step 2 – Generate self-signed certificate for the HTTPS catch-all block
+#           (only if the cert does not already exist)
+# ---------------------------------------------------------------------------
+info "Step 2/5 – Checking / generating self-signed TLS certificate"
+if [[ -f "$SSL_CERT" && -f "$SSL_KEY" ]]; then
+    info "Certificate already exists at ${SSL_CERT} – skipping generation."
+else
+    info "Generating self-signed certificate …"
+    openssl req -x509 -nodes -days 3650 \
+        -newkey rsa:2048 \
+        -keyout "$SSL_KEY" \
+        -out    "$SSL_CERT" \
+        -subj   "/C=US/ST=State/L=City/O=Server/CN=localhost" \
+        2>/dev/null
+    chmod 600 "$SSL_KEY"
+    info "Self-signed certificate written to ${SSL_CERT}"
+fi
+
+# ---------------------------------------------------------------------------
+# Step 3 – Write the rate-limit zone to conf.d (http context)
+#           limit_req_zone must live in the http { } block, not inside a
+#           server { } block.  /etc/nginx/conf.d/ is included inside http {}.
+# ---------------------------------------------------------------------------
+info "Step 3/5 – Writing rate-limit zone config to ${RATE_LIMIT_CONF}"
+cat > "$RATE_LIMIT_CONF" <<'RATELIMIT'
+# Rate-limit zone shared across all vhosts.
+# Allows 10 requests/s per client IP, with a 10 MB state store.
+limit_req_zone $binary_remote_addr zone=one:10m rate=10r/s;
+RATELIMIT
+info "Rate-limit zone config written."
+
+# ---------------------------------------------------------------------------
+# Step 4 – Write the new hardened default vhost
+# ---------------------------------------------------------------------------
+info "Step 4/5 – Writing hardened default vhost to ${NGINX_DEFAULT}"
+cat > "$NGINX_DEFAULT" <<NGINXCONF
+# =============================================================================
+# /etc/nginx/sites-available/default  –  IP-blocking / catch-all vhost
+# =============================================================================
+# This file is the LOWEST-priority catch-all.  Any HTTP or HTTPS request that
+# arrives with a bare IP address (or a host header that doesn't match any other
+# server_name) lands here and is immediately dropped (return 444).
+#
+# Generated by harden_nginx_default.sh on $(date -u '+%Y-%m-%dT%H:%M:%SZ')
+# =============================================================================
+
+# -------------------------------------------------------------------------
+# HTTP catch-all  (port 80)
+# -------------------------------------------------------------------------
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+
+    # Catch-all – matches any host not claimed by another server block
+    server_name _;
+
+    # Log IP-direct hits so you can monitor them
+    access_log /var/log/nginx/default_access.log;
+    error_log  /var/log/nginx/default_error.log notice;
+
+    # --- Security: block common malicious scanner paths ---
+    location ~* (\\.env|\\.git|\\.svn|\\.htaccess|\\.bash_history|composer\\.json|composer\\.lock|wp-admin|xmlrpc\\.php|/cgi-bin/|/luci/|/admin/|/etc/passwd) {
+        deny all;
+        return 444;
+    }
+
+    # --- Block obvious malicious/scanner User-Agents ---
+    if (\$http_user_agent ~* (sqlmap|acunetix|nikto|nessus|curl|wget|python|nmap|masscan)) {
+        return 403;
+    }
+
+    # --- Apply rate limiting ---
+    limit_req zone=one burst=20 nodelay;
+
+    # --- Block random PHP file requests ---
+    location ~* \\.php\$ {
+        return 404;
+    }
+
+    # --- Drop everything else (no response body, TCP connection closed) ---
+    return 444;
+}
+
+# -------------------------------------------------------------------------
+# HTTPS catch-all  (port 443)
+# -------------------------------------------------------------------------
+server {
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+
+    server_name _;
+
+    # Self-signed cert – only used to complete the TLS handshake before
+    # dropping the connection.  Real domains should have their own blocks.
+    ssl_certificate     ${SSL_CERT};
+    ssl_certificate_key ${SSL_KEY};
+
+    access_log /var/log/nginx/default_ssl_access.log;
+    error_log  /var/log/nginx/default_ssl_error.log notice;
+
+    # --- Security: block common malicious scanner paths ---
+    location ~* (\\.env|\\.git|\\.svn|\\.htaccess|\\.bash_history|composer\\.json|composer\\.lock|wp-admin|xmlrpc\\.php|/cgi-bin/|/luci/|/admin/|/etc/passwd) {
+        deny all;
+        return 444;
+    }
+
+    # --- Block obvious malicious/scanner User-Agents ---
+    if (\$http_user_agent ~* (sqlmap|acunetix|nikto|nessus|curl|wget|python|nmap|masscan)) {
+        return 403;
+    }
+
+    # --- Apply rate limiting ---
+    limit_req zone=one burst=20 nodelay;
+
+    # --- Block random PHP file requests ---
+    location ~* \\.php\$ {
+        return 404;
+    }
+
+    # --- Drop everything else ---
+    return 444;
+}
+NGINXCONF
+
+info "New vhost written to ${NGINX_DEFAULT}"
+
+# ---------------------------------------------------------------------------
+# Step 5 – Test Nginx configuration
+# ---------------------------------------------------------------------------
+info "Step 5/5 – Testing Nginx configuration (nginx -t) …"
+
+if nginx -t 2>&1; then
+    info "Nginx configuration test PASSED."
+    info "Reloading Nginx …"
+    systemctl reload nginx
+    echo ""
+    echo -e "${GREEN}✔  Done!${NC} The default vhost now blocks all bare-IP HTTP/HTTPS requests."
+    echo    "   Backup of the old config: ${BACKUP}"
+    echo    "   TLS certificate:          ${SSL_CERT}"
+    echo    "   Rate-limit zone config:   ${RATE_LIMIT_CONF}"
+else
+    error "Nginx configuration test FAILED!"
+    warn  "Restoring backup from ${BACKUP} …"
+    if [[ -f "$BACKUP" ]]; then
+        cp -p "$BACKUP" "$NGINX_DEFAULT"
+        info "Backup restored to ${NGINX_DEFAULT}"
+    else
+        error "No backup found – please fix ${NGINX_DEFAULT} manually."
+    fi
+
+    # Also clean up the rate-limit conf we just wrote since it might be the cause
+    warn "Removing rate-limit conf at ${RATE_LIMIT_CONF} …"
+    rm -f "$RATE_LIMIT_CONF"
+
+    error "Script exited with errors. Nginx was NOT reloaded."
+    exit 1
+fi

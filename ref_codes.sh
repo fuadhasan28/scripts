@@ -60,6 +60,9 @@ go
   wget http://35.238.55.41:2004/NopStation.Core.zip -P /home/nopapp/Downloads/
   sudo -S unzip -o "/home/nopapp/Downloads/NopStation.Core.zip" -d "/var/www/NopSites/Demo/470/Demo_470/Plugins"
   
+  
+  sudo -S unzip -o "/home/ubuntu/downloads/Nop_470_GrapeDeals.zip" -d "/var/www/Nop_470_GrapeDeals"
+  
   /home/nopapp/Downloads/NopStation.Core.zip
   
   
@@ -105,6 +108,12 @@ go
   sudo chmod -R 755 /var/www/nop_4.70.4_radioWaveHub/ && sudo chown -R www-data:www-data /var/www/nop_4.70.4_radioWaveHub/
   sudo chmod -R 755 /var/www/NopSites/Theme/470/Theme_Kingdom/ && sudo chown -R www-data:www-data /var/www/NopSites/Theme/470/Theme_Kingdom/
   sudo chmod -R 755 /var/www/NopSites/AppSite/470/AppSite_DrinkSpot_Test/ && sudo chown -R www-data:www-data /var/www/NopSites/AppSite/470/AppSite_DrinkSpot_Test/
+  sudo chmod -R 755 /var/www/Nop_470_GrapeDeals_Stage/ && sudo chown -R www-data:www-data /var/www/Nop_470_GrapeDeals_Stage/
+  sudo chmod -R 755 /var/www/NopSites/nop_4.70.4_radioWaveHub/ && sudo chown -R www-data:www-data /var/www/NopSites/nop_4.70.4_radioWaveHub/
+  
+  
+  
+  sudo chmod -R 755 /var/www/Nop_470_GrapeDeals/ && sudo chown -R www-data:www-data /var/www/Nop_470_GrapeDeals/
   
   
   
@@ -195,6 +204,8 @@ sudo systemctl disable nop_Theme_NopKalles_470.service
 sudo systemctl disable nop_Theme_Orchid_470.service
 sudo systemctl disable nop_Theme_Tulip_470.service
 sudo systemctl disable nop_Theme_Valley_470.service
+
+curl -o "https://drinkspot-db-backups.s3.ap-southeast-2.amazonaws.com/GrapeDeals_Prod_470_12012026.bak?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=ASIAU6GDYFVD4WNZJSKI%2F20260128%2Fap-southeast-2%2Fs3%2Faws4_request&X-Amz-Date=20260128T134302Z&X-Amz-Expires=300&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEKb%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaDmFwLXNvdXRoZWFzdC0yIkgwRgIhAKKdKlJjeY42w91dGnpVLQ98vRHwEw%2B0yRXD17yLGY%2BGAiEA%2FIPWHYqHqlH8KTW30aL4VxUh6tJZoGM%2BdTTTjgn4pS4q%2BwIIbxAAGgwzMzk3MTI5NDU0NzkiDC92BxSWISEjx2cnvirYAkNL%2F90RQcJFtpULi7yXWYeNowfCIEn7QMbn0%2BMiySaVXzGI2SaBuEgTAgyTGdWf90%2Bv6K%2FH2g5%2B1S4SzvfnuAa0pfZyiBbANru%2BNqf%2Be3vaYMoKnmyWanw2Jiy%2BbRVas1W8DHvCSVYR2QRgA93V99MTwHLv8MfWQIUynx%2BaF6zvXyoRGNflI7G%2FsF%2FbAAfcVv%2BDuhJmwyjNBDZnAbFwbun2wSTFdy509AEG3tk%2FFZZ73CTUwgJv%2BtHyXGQSEvqEUSC%2BiqbSwS%2Fest%2F81gv4%2Fo%2FKiHyjs%2F28jQ%2F13uuRVWRjgAb%2FHugYeClif2BFmjblx5Vhdo62jxb1JIGnzWoXjSa%2BA8bFaAMBx%2BCCo5HyJRq62JKabqhbcmZ8gG6vrPcTxBQjIW8VVpEIcPaOAhZoadaO1RJE89LJbKNWDT31BspA3O8sHGKVeJFGi7hkM3sPk71iYEfrl5hyML2Z6MsGOqwCmrZ1i2Cxs8HOzputOIE1D8XKRe%2BpkfBW8R%2FHQ7ZEuYhLt9u%2Fczvmvb5fZnwkY6FrctTECMooLP%2FqzUfwAS%2FMJbp%2Fug45NDY1S06VIrweDyxNNU%2BYVDV4BOdRbbhkjjBXUeHCQnzyAyUUTsjI1e0Ocf1qs1obPM0HCHyWAlAm5g8VmQJmGAqrh14mPPP3x8FtUr%2FhE5ywvrtsHfcDe1DmYESdTgi15XtahTyKZktrlhl6lALoeo3EmE84fNf7nkgwnb0gkDTg96KazGalaaw65oI0onl50H%2FdlaBb60BP9E9wXuWJGeWJ0xaxB%2BN9ISv6hmcPrgMLJ5FXiaZ5Ql5Ru8NhNbn%2B4YeSDTokenFoiWqQwD%2FotHlGVMpAGzK2WIGJj65%2BlckA4uGvFmnT&X-Amz-Signature=0abaab310451c76e7fd3754ee3a69add777d378a269daddc50aec20d1b91a0e3&X-Amz-SignedHeaders=host&response-content-disposition=attachment"
    
    
    
@@ -313,3 +324,31 @@ $(document).on('swiper_initialized', function () {
 sudo cp ../Areas/ ./
 sudo cp ../Views/ ./
 sudo cp ../plugins/ ./
+
+mkdir Areas Components Contents Controllers Data Domains Dtos Factories Infrastructure Models Services Tasks Themes Views Validators
+cd Areas
+mkdir Admin
+cd Admin
+mkdir Components Controllers Factories Infrastructure Models Views Validators
+
+curl -o "GrapeDeals_Prod_470_12012026_01.bak" "https://drinkspot-db-backups.s3.ap-southeast-2.amazonaws.com/GrapeDeals_Prod_470_12012026.bak?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=ASIAU6GDYFVD6GXXGD7Z%2F20260130%2Fap-southeast-2%2Fs3%2Faws4_request&X-Amz-Date=20260130T115308Z&X-Amz-Expires=300&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENT%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaDmFwLXNvdXRoZWFzdC0yIkcwRQIgFb2L5TrN1M%2Blw4agmG8VfVyqJ9eY9XGPofSJexvAQjgCIQCOSpk4k5DjG0qyZE9%2FkaP1FutPC9%2Bg5EqSDCPtDigZkyqEAwid%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAAaDDMzOTcxMjk0NTQ3OSIMizrMN9X%2B7xhWTPbpKtgCv0xOinbyhzz8sZwn88grQ5aNWXeQmkarQLcnM7AXmoTvD0%2FED8FSA0g6t8o9Pf0IeI54WPRBoCubDJWimIfjeLooHKWVaPNgK2Vvv9NqX%2F3mXqdv49LiuIsQwb%2BnRnUGdATmD6xu533j6bUoYcZX1EM8hPwxvrUApa7FWRQUac%2Bgjpl8K4BAQJQ7he%2BZRqEEBqatRNlAuEq%2BPmXT3MYIGdN77z8A40lkrjHYuyuf4wvTCNI4c70MATZeUef%2B73ecwGV9YsEnNONesmvFeQCrkl8MzuNG16VM7g0Y3KL5A5zUs9iRYveusXhUGnvAsuY9e%2BmnDRMccZePE0NvngOcIWh0qTQ0cS5xla%2BFLf6ZszSIT8wCx4opOlavlQGOZC%2FkJ2tW0FYOsd2DOtvYRXcXBADqT1Wg9Zx8Ln0VFOnh8ihE8MLxJoCgS8B9umiwe22iU%2BV%2B4Wor4sswj7PyywY6rQK%2FAwjBY%2FSsduqtnWa3fnJPHiJxBB1uyPz36W0VCJO6ea80%2FWbKee6JgqvCnuo6%2FqeNwummo4S6qWvcy4uTxpNlitxngF%2FjJvEd6xC98ISzaZ8l5tjdKOJASK06B1jUAd0JLuCu8Pj%2BhJN1KzBhm2TKCLFrR1KCkba2Evf3ZqUP3C8Teu5%2Bnz4SEL4UtAh9eTnCF8cdYPjO%2Fk4vrGvHgbIP%2Fu6xa%2Bk6jxe8RkwMIgQEpR1vyWE2YeGsPFQZX9NBEYcJR4S2Afi%2Bv15Tly1jlG9oZYGWQ42UEZ4HrOpMfIEzkfTvzb2rCOIuOH5aWi7qMNm0FOXIf%2FMIqbKtHhR1Gx%2BzwnB8hNvew50m%2BwUKNt1Q19HA67Vlr1b4wHmLu3o82Q4Os3epazmmK3qH0Y9u&X-Amz-Signature=aa29d79554bae6a4a8ba63a96fe9de714b41b712c2e8d7391ca3b877e39d5dcc&X-Amz-SignedHeaders=host&response-content-disposition=attachment"
+
+
+server {
+    listen 80;
+    listen [::]:80;
+
+    root /var/www/html;
+    server_name  shop.example.com;
+
+    location / {
+		proxy_pass         http://localhost:5000;
+		proxy_http_version 1.1;
+		proxy_set_header   Upgrade $http_upgrade;
+		proxy_set_header   Connection keep-alive;
+		proxy_set_header   Host $host;
+		proxy_cache_bypass $http_upgrade;
+		proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+		proxy_set_header   X-Forwarded-Proto $scheme;
+    }
+}

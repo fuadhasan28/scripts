@@ -1,0 +1,65 @@
+# Minimal default vhost: close connections for requests addressed to the server IP
+# or any host that doesn't match a configured server_name.
+#
+# Save this file to /etc/nginx/sites-available/default (back up the old file first),
+# then run: sudo nginx -t && sudo systemctl reload nginx
+
+# Define rate limiting zone (must be in 'http' context, so define it in nginx.conf instead if needed)
+# But for simplicity, we’ll keep it here assuming inclusion in http context
+limit_req_zone $binary_remote_addr zone=one:10m rate=10r/s;
+
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+
+    # Catch-all name for unmatched hosts / IP requests
+    server_name _;
+
+    # Optional: log to files so you can monitor IP hits, change or remove as desired
+    access_log /var/log/nginx/default_access.log;
+    error_log  /var/log/nginx/default_error.log notice;
+
+    # Immediately close the connection for everything hitting this vhost
+    return 444;
+
+    # --- Security Rules ---
+    
+    # Block common malicious patterns
+    location ~* (\.env|\.git|\.svn|\.htaccess|\.bash_history|composer\.json|composer\.lock|wp-admin|xmlrpc\.php|/cgi-bin/|/luci/|/admin/|/etc/passwd) {
+        deny all;
+        return 444;
+    }
+
+    # Limit bad bots
+    if ($http_user_agent ~* (sqlmap|acunetix|nikto|nessus|curl|wget|python|nmap|masscan)) {
+        return 403;
+    }
+
+    # Apply rate limiting
+    limit_req zone=one burst=20 nodelay;
+
+    # Block random .php file requests
+    location ~* \.php$ {
+        return 404;
+    }
+
+
+}
+
+# If you want to also explicitly handle unmatched HTTPS traffic, create a separate
+# default 443 server block (requires a certificate — self-signed is OK for rejecting).
+# Example (UNCOMMENT and install cert/key if you want this behavior):
+#
+server {
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+    server_name _;
+
+    ssl_certificate /etc/ssl/certs/nginx-default.crt;
+    ssl_certificate_key /etc/ssl/private/nginx-default.key;
+
+    access_log /var/log/nginx/default_ssl_access.log;
+    error_log  /var/log/nginx/default_ssl_error.log notice;
+
+    return 444;
+}
