@@ -115,7 +115,7 @@ validate_site_type_index() {
 print_site_types
 
 while true; do
-    read -p "Enter an index for site type (default is Test): " siteTypeIndex
+    read -e -p "Enter an index for site type (default is Test): " siteTypeIndex
     if [[ -z "$siteTypeIndex" ]]; then
         echo "No input provided. Using default site type: $selectedSiteType"
         break
@@ -125,7 +125,7 @@ while true; do
         
         # If "Other" is selected, ask for custom input
         if [[ "$selectedSiteType" == "Other" ]]; then
-            read -p "Please enter a custom site type: " customSiteType
+            read -e -p "Please enter a custom site type: " customSiteType
             if [[ -n "$customSiteType" ]]; then
                 selectedSiteType="$customSiteType"
                 echo "Custom site type selected: $selectedSiteType"
@@ -182,7 +182,7 @@ validate_index() {
 print_array
 
 while true; do
-    read -p "Enter an index: " index
+    read -e -p "Enter an index: " index
     if validate_index "$index"; then
         valid_index=$((index-1))
         echo "Element at index $index is: ${nopCommerce_versions[valid_index]}"
@@ -234,7 +234,7 @@ check_service() {
 
 # Main loop to take input until valid
 while true; do
-    read -p "Enter a name for hosting dir and service (length > 2, no special characters or spaces): " input
+    read -e -p "Enter a name for hosting dir and service (length > 2, no special characters or spaces): " input
     if ! validate_input "$input"; then
         echo "Invalid input. Please try again."
     else
@@ -280,50 +280,51 @@ generate_random_port() {
     echo "${available_ports[random_index]}"
 }
 
-# Prompt user to accept, deny, choose a port, or exit
-prompt_user() {
-    local port="$1"
-    while true; do
-        echo -e "A random port \e[93m$port\e[0m is available. Do you want to accept it? \e[91m Type(y/n) or 'exit' to exit or type 'c' \e[0mto input a port of your choice(Anyother input to continue with \e[93m$port\e[0m port): " 
-        read -p "Your choice:" choice
-        case "$choice" in
-            n|N) return 1 ;;
-            exit) echo "\e[32mExiting...\e[0m"; exit ;;
-            c) read -p "Enter a port of your choice: " chosen_port
-                    if [[ "$chosen_port" =~ ^[0-9]+$ ]]; then
-                        if ! [[ " ${reserved_ports[@]} " =~ " $chosen_port " ]] && is_port_available "$chosen_port"; then
-                            echo -e "Chosen port \e[93m$chosen_port\e[0m is available."
-                            return 0
-                        else
-                            echo -e "Port \e[93m$chosen_port\e[0m is not available or is reserved. Please choose another port."
-                        fi
-                    else
-                        echo -e "\e[31mInvalid port number. Please enter a valid port number.\e[0m "
-                    fi ;;
-            y|Y|*) return 0 ;;
-        esac
-    done
-}
-
-# Main script
-echo -e "\e[32mSearching for available port...\e[0m"
+# Prompt user for port choice
 while true; do
-    port=$(generate_random_port)
-    if [[ -z "$port" ]]; then
-        echo -e "\e[31mNo available port found.\e[0m"
-        exit 1
-    fi
-    if prompt_user "$port"; then
-        if [[ "$choice" == "c" ]]; then
-            echo -e "Chosen port: \e[32m$chosen_port\e[0m"
-			port=$chosen_port
-        else
-            echo -e "\e[32mAccepted port: $port\e[0m"
-        fi
-        break
-    else
-        echo -e "Port \e[31m$port\e[0m denied. Searching for another available port..."
-    fi
+    echo -e "\nHow do you want to configure the port for nopCommerce?"
+    echo "1) Input a port manually"
+    echo "2) Proceed with a random available port"
+    echo "3) Exit"
+    read -e -p "Enter your choice (1, 2, or 3): " port_choice
+    
+    case "$port_choice" in
+        1)
+            while true; do
+                read -e -p "Enter a port of your choice: " chosen_port
+                if [[ "$chosen_port" =~ ^[0-9]+$ ]]; then
+                    if [[ " ${reserved_ports[@]} " =~ " $chosen_port " ]]; then
+                        echo -e "\e[31mPort $chosen_port is a reserved port. Please choose another port.\e[0m"
+                    elif ! is_port_available "$chosen_port"; then
+                        echo -e "\e[31mPort $chosen_port is already in use. Please choose another port.\e[0m"
+                    else
+                        port=$chosen_port
+                        echo -e "Using custom port: \e[32m$port\e[0m"
+                        break 2
+                    fi
+                else
+                    echo -e "\e[31mInvalid port number. Please enter a valid number.\e[0m"
+                fi
+            done
+            ;;
+        2)
+            echo -e "\e[32mSearching for available port...\e[0m"
+            port=$(generate_random_port)
+            if [[ -z "$port" ]]; then
+                echo -e "\e[31mNo available port found in range 5001-9000.\e[0m"
+                exit 1
+            fi
+            echo -e "Using random port: \e[32m$port\e[0m"
+            break
+            ;;
+        3)
+            echo -e "\e[31mExiting...\e[0m"
+            exit 0
+            ;;
+        *)
+            echo -e "\e[31mInvalid option. Please enter 1, 2, or 3.\e[0m"
+            ;;
+    esac
 done
 
 # ************************************************************ start hosting nop ************************************************************
@@ -334,27 +335,35 @@ check_and_create_directory $nopHostingDir
 
 #install asp.net
 # Set .NET version
-# Check if dotnet-runtime is installed
-if ! dpkg -s dotnet-runtime-$dotnetVersion &>/dev/null; then
-    echo -e "\e[93m.NET Runtime $dotnetVersion is not installed. Installing...\e[0m"
+# Check if the required ASP.NET Core Runtime is already installed
+if ! (command -v dotnet &>/dev/null && dotnet --list-runtimes | grep -q "Microsoft.AspNetCore.App $dotnetVersion"); then
+    echo -e "\e[93mASP.NET Core Runtime $dotnetVersion is not installed. Installing...\e[0m"
     
-    # Download and register the Microsoft package repository
-    wget https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
-    sudo dpkg -i packages-microsoft-prod.deb
+    # Identify Ubuntu version
+    ubuntu_version=$(lsb_release -rs)
+    ubuntu_major=$(echo "$ubuntu_version" | cut -d. -f1)
     
-    # Update package lists
-    sudo apt update -y
+    if [ "$ubuntu_major" -ge 22 ]; then
+        # For Ubuntu 22.04+ (Jammy/Noble), use Canonical's official backports to avoid repository conflicts
+        echo "Ubuntu 22.04+ detected. Using native repositories / Backports PPA..."
+        sudo add-apt-repository ppa:dotnet/backports -y
+        sudo apt update -y
+    else
+        # Fallback for Ubuntu 20.04 (Focal) or older
+        echo "Ubuntu version older than 22.04 detected. Using Microsoft repository..."
+        wget "https://packages.microsoft.com/config/ubuntu/$ubuntu_version/packages-microsoft-prod.deb" -O packages-microsoft-prod.deb
+        sudo dpkg -i packages-microsoft-prod.deb
+        rm -f packages-microsoft-prod.deb
+        sudo apt update -y
+        sudo apt install -y apt-transport-https
+    fi
     
-    # Install dependencies
-    sudo apt install -y apt-transport-https
-    
-    # Install .NET Runtime and ASP.NET Core Runtime
-    sudo apt-get install -y dotnet-runtime-$dotnetVersion
+    # Install ASP.NET Core Runtime (this automatically installs the base dotnet-runtime as well)
     sudo apt install -y aspnetcore-runtime-$dotnetVersion
     
-    echo -e "\e[92m.NET Runtime $dotnetVersion and ASP.NET Core Runtime $dotnetVersion installed successfully.\e[0m"
+    echo -e "\e[92mASP.NET Core Runtime $dotnetVersion installed successfully.\e[0m"
 else
-    echo -e "\e[92m.NET Runtime $dotnetVersion is already installed.\e[0m"
+    echo -e "\e[92mASP.NET Core Runtime $dotnetVersion is already installed.\e[0m"
 fi
 
 dotnet --list-runtimes
@@ -402,6 +411,9 @@ ls -l "$wwwRootPath/*"
 
 # writing service
 
+# Resolve the dynamic dotnet binary path
+dotnetPath=$(which dotnet 2>/dev/null || echo "/usr/bin/dotnet")
+
 #!/bin/bash
 cd "$etcPath"
 
@@ -411,7 +423,7 @@ Description=NopCommerce $nopVersion application type of $selectedSiteType for $d
 
 [Service]
 WorkingDirectory=$nopHostingDir
-ExecStart=/usr/bin/dotnet "$nopHostingDir/Nop.Web.dll" --urls=http://0.0.0.0:$port
+ExecStart=$dotnetPath "$nopHostingDir/Nop.Web.dll" --urls=http://0.0.0.0:$port
 Restart=always
 
 # Auto restart nopCommerce in 10 seconds if .NET crashes
@@ -422,6 +434,10 @@ SyslogIdentifier=nopcommerce
 User=www-data
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+Environment=ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+Environment=ASPNETCORE_FORWARDEDHEADERS_FORWARDLIMIT=1
+Environment=ASPNETCORE_FORWARDEDHEADERS_KNOWNPROXIES=127.0.0.1
+
 
 [Install]
 WantedBy=multi-user.target

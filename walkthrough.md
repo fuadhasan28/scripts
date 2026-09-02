@@ -1,47 +1,83 @@
-# N8NManager Plugin Implementation Walkthrough
+# Server Monitoring Setup Walkthrough (`10.112.165.132`)
 
-I have successfully implemented Tasks 4 through 10 for the N8NManager plugin, fulfilling the core requirements of the plugin as defined in the development plan. Here is a summary of the work completed:
+This document summarizes the installation, configuration, port exclusions, and verification of the monitoring stack on **`10.112.165.132`** (`noptraining`).
 
-## 1. Service Layer & HTTP Clients
-- Implemented `IN8nHttpClient` and `N8nHttpClient` to handle communication with the n8n API. 
-- The client properly reads the API credentials from the settings and manages endpoint construction for workflows, data tables, and webhook routing.
-- Built the `N8nManagerService` to manage bulk data serialization, enabling both newsletter and product synchronizations to n8n data tables in batches.
+---
 
-## 2. Background Task Automation
-- Created `ForceSyncSubscribersScheduleTask` to routinely gather all newsletter subscriptions and sync them in pages of 100 via the `N8nManagerService`.
-- Created `ForceSyncCatalogScheduleTask` to synchronize products in the same manner.
-- Both tasks execute seamlessly in the background using nopCommerce's `IScheduleTask` infrastructure.
+## 1. Port Exclusion & Mapping Matrix
 
-## 3. Real-Time Event Consumers
-- Built `N8nEventConsumer` with robust listening capabilities for:
-  - `EntityInsertedEvent`/`UpdatedEvent`/`DeletedEvent` for `NewsLetterSubscription`
-  - `EmailSubscribedEvent` / `EmailUnsubscribedEvent`
-  - `CustomerRegisteredEvent`
-  - `OrderPlacedEvent` / `OrderPaidEvent`
-  - `EntityInsertedEvent`/`UpdatedEvent` for `Product`
-  - `EntityInsertedEvent<DiscountUsageHistory>`
-- Each event dynamically filters based on user configuration before firing off payloads to the n8n Master Webhook URL.
+| Service | Target Port | Status | Reason |
+| :--- | :--- | :--- | :--- |
+| **Port 3000** | Reserved | SKIPPED | Reserved for internal applications |
+| **Port 3001** | Reserved | SKIPPED | Used by Uptime Kuma (`uptime-kuma`) |
+| **Port 5000** | Reserved | SKIPPED | Reserved for internal applications |
+| **Port 9090** | Reserved | SKIPPED | Used by systemd socket activation |
+| **Prometheus** | `9091` | ACTIVE | Scraping Node Exporter, Grafana, and itself |
+| **Node Exporter** | `9100` | ACTIVE | Server hardware & OS metrics collector |
+| **Grafana Server** | `3002` | ACTIVE | Visualisation dashboards UI |
 
-## 4. Admin ViewModels, Factories, and Views
-- Developed the `ConfigurationModel` encompassing all API and trigger settings, fully mapped to the `N8NManagerSettings`.
-- Created an elegant `Configure.cshtml` utilizing NopStation UI components (`nop-cards`, `nop-override-store-checkbox`) with tabs for API Credentials, Event Triggers, and Bulk Sync Mapping.
-- Removed outdated Data Table API logic and replaced it with direct Webhook URLs matching n8n's standard capabilities.
+---
 
-## 5. Frontend Analytics & Controllers
-- Built a standard JavaScript tracker `n8n.tracker.js` utilizing AJAX to listen for cart actions and view product loads.
-- Created `N8nTrackerViewComponent`, securely injected into `PublicWidgetZones.BodyStartHtmlTagAfter` via the main `N8NManagerPlugin.cs` class.
-- Linked everything up through `N8NManagerAdminController` (for admin settings UI) and `N8NManagerController` (for public endpoints).
+## 2. Completed Steps
 
-## 6. Official Plugin Documentation
-- Created `N8NManager_Documentation.md` containing detailed step-by-step installation, Webhook configuration, and payload examples for n8n.
+1. **Service Reset & Cleanup**: Stopped pre-existing unconfigured Prometheus and Node Exporter systemd services.
+2. **Directory & User Infrastructure**:
+   - Created non-login system users `prometheus` and `node_exporter`.
+   - Setup `/etc/prometheus`, `/var/lib/prometheus`, `/var/lib/grafana`.
+3. **Node Exporter Deployment**:
+   - Downloaded and placed binary `/usr/local/bin/node_exporter`.
+   - Created systemd unit `/etc/systemd/system/node_exporter.service`.
+4. **Prometheus Deployment**:
+   - Downloaded and placed binaries `/usr/local/bin/prometheus` & `/usr/local/bin/promtool`.
+   - Created `/etc/prometheus/prometheus.yml` configured to scrape:
+     - Prometheus (`localhost:9091`)
+     - Node Exporter (`localhost:9100`)
+     - Grafana (`localhost:3002`)
+   - Created systemd unit `/etc/systemd/system/prometheus.service` bound to `:9091`.
+5. **Grafana OSS Deployment**:
+   - Resolved GPG keyring issue by adding `https://apt.grafana.com/gpg.key` to `/etc/apt/keyrings/grafana.gpg`.
+   - Installed `grafana-server` via `apt`.
+   - Updated `/etc/grafana/grafana.ini` to set `http_port = 3002`.
+6. **Service Activation & Verification**:
+   - Enabled and started `node_exporter`, `prometheus`, and `grafana-server`.
+   - Confirmed endpoints via `curl` health checks.
 
-> [!NOTE]
-> All progress has been documented meticulously within `References/N8N/development_log.md` and standard nopCommerce conventions from `Agents.md` and the frontend rules have been followed.
+---
 
-## Next Steps
-The core implementation is ready. The remaining tasks from your plan are:
-- Task 11: Document the Plugin
-- Task 12: Write Test Cases
-- Task 13: Build and Package
+## 3. Verification Metrics & Endpoints
 
-Please review the progress and let me know if you would like me to proceed with the remaining documentation and packaging tasks!
+- **Grafana Web Interface**: [`http://10.112.165.132:3002`](http://10.112.165.132:3002)
+- **Prometheus Web UI**: [`http://10.112.165.132:9091`](http://10.112.165.132:9091)
+- **Node Exporter Endpoint**: [`http://10.112.165.132:9100/metrics`](http://10.112.165.132:9100/metrics)
+
+---
+
+## 5. nsGit Remote Monitoring Setup (`172.16.229.55`)
+
+- **Node Exporter**: Running on `172.16.229.55:9100` with `--collector.systemd` monitoring `gitea-prod.service`.
+- **Remote Scrape**: Added `nsgit_node` job to `/etc/prometheus/prometheus.yml` on `10.112.165.132`.
+- **Grafana Dashboard**: Created `nsGit Server Monitoring` dashboard at [`/d/nsgit-monitoring-v1/nsgit-server-monitoring`](http://10.112.165.132:3002/d/nsgit-monitoring-v1/nsgit-server-monitoring).
+
+---
+
+## 6. Telegram Alerting System
+
+- **Contact Point**: `telegram-nsgit-alerts` configured in Grafana with bot token `8961988358:AAFeLEXzY4JdLjP-bD6mDq9lCsRmRMSMBFg`.
+- **Notification Policy**: Default policy routes all alerts to `telegram-nsgit-alerts`.
+- **Alert Rules Provisioned (Folder: `nsGit Server` / Group: `nsgit-alerts`)**:
+  1. `nsGit: gitea-prod.service Down` (Critical, <1 active for 1m)
+  2. `nsGit: Server Unreachable / Down` (Critical, up == 0 for 1m)
+  3. `nsGit: High CPU Utilization (>85%)` (Warning, >85% for 5m)
+  4. `nsGit: High RAM Utilization (>90%)` (Warning, >90% for 5m)
+  5. `nsGit: Low Disk Space (>90% full)` (Warning, >90% for 5m)
+- **Status**: All 5 rules active and evaluated in `Normal` state.
+
+---
+
+## 7. Documentation Artifacts Generated
+
+1. [`final_installation_report.md`](file:///c:/001.Data/scripts/scripts/final_installation_report.md): Reproducible guide for deploying the monitoring stack on other servers.
+2. [`server_132_monitoring_log.md`](file:///c:/001.Data/scripts/scripts/server_132_monitoring_log.md): Execution & rollback log for server `10.112.165.132`.
+3. [`nsgit_monitoring_log.md`](file:///c:/001.Data/scripts/scripts/nsgit_monitoring_log.md): Execution & rollback log for nsGit (`172.16.229.55`).
+4. [`nsgit_final_report.md`](file:///c:/001.Data/scripts/scripts/nsgit_final_report.md): Standalone setup & replication guide for nsGit monitoring.
+5. [`work_log.md`](file:///c:/001.Data/scripts/scripts/work_log.md): Workspace progress tracking.
